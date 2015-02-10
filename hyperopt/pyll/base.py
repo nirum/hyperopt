@@ -8,14 +8,14 @@ import logging; logger = logging.getLogger(__name__)
 import operator
 import time
 
-from StringIO import StringIO
+from io import StringIO
 from collections import deque
 
 import networkx as nx
 
 # TODO: move things depending on numpy (among others too) to a library file
 import numpy as np
-np_versions = map(int, np.__version__.split('.')[:2])
+np_versions = list(map(int, np.__version__.split('.')[:2]))
 
 
 DEFAULT_MAX_PROGRAM_LEN = 100000
@@ -57,7 +57,7 @@ class SymbolTable(object):
 
     def _new_apply(self, name, args, kwargs, o_len, pure):
         pos_args = [as_apply(a) for a in args]
-        named_args = [(k, as_apply(v)) for (k, v) in kwargs.items()]
+        named_args = [(k, as_apply(v)) for (k, v) in list(kwargs.items())]
         named_args.sort()
         return Apply(name,
                 pos_args=pos_args,
@@ -102,17 +102,17 @@ class SymbolTable(object):
 
     def max(self, *args):
         """ return max of args """
-        return self._new_apply('max', map(as_apply, args), {},
+        return self._new_apply('max', list(map(as_apply, args)), {},
                 o_len=None, pure=True)
 
     def min(self, *args):
         """ return min of args """
-        return self._new_apply('min', map(as_apply, args), {},
+        return self._new_apply('min', list(map(as_apply, args)), {},
                 o_len=None, pure=True)
 
     def getattr(self, obj, attr, *args):
         return self._new_apply('getattr',
-                [as_apply(obj), as_apply(attr)] + map(as_apply, args),
+                [as_apply(obj), as_apply(attr)] + list(map(as_apply, args)),
                 {},
                 o_len=None,
                 pure=True)
@@ -144,7 +144,7 @@ class SymbolTable(object):
         return self._define(f, o_len, pure)
 
     def undefine(self, f):
-        if isinstance(f, basestring):
+        if isinstance(f, str):
             name = f
         else:
             name = f.__name__
@@ -171,7 +171,7 @@ class SymbolTable(object):
                 rval[k] = getattr(self, k)
             except AttributeError:
                 raise PyllImportError(k)
-        for k, origk in kwargs.items():
+        for k, origk in list(kwargs.items()):
             try:
                 rval[k] = getattr(self, origk)
             except AttributeError:
@@ -211,12 +211,12 @@ def as_apply(obj):
     elif isinstance(obj, list):
         rval = Apply('pos_args', [as_apply(a) for a in obj], {}, None)
     elif isinstance(obj, dict):
-        items = obj.items()
+        items = list(obj.items())
         # -- should be fine to allow numbers and simple things
         #    but think about if it's ok to allow Applys
         #    it messes up sorting at the very least.
         items.sort()
-        if all(isinstance(k, basestring) for k in obj):
+        if all(isinstance(k, str) for k in obj):
             named_args = [(k, as_apply(v)) for (k, v) in items]
             rval = Apply('dict', [], named_args, len(named_args))
         else:
@@ -254,7 +254,7 @@ class Apply(object):
         self.define_params = define_params
         assert all(isinstance(v, Apply) for v in pos_args)
         assert all(isinstance(v, Apply) for k, v in named_args)
-        assert all(isinstance(k, basestring) for k, v in named_args)
+        assert all(isinstance(k, str) for k, v in named_args)
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -348,10 +348,10 @@ class Apply(object):
                 param_names = code.co_varnames[:code.co_argcount]
                 pos_params = param_names[:code.co_argcount]
         except AssertionError:
-            print 'YIKES: MISUNDERSTANDING OF CALL PROTOCOL:',
-            print code.co_argcount,
-            print code.co_varnames,
-            print '%x' % code.co_flags
+            print('YIKES: MISUNDERSTANDING OF CALL PROTOCOL:', end=' ')
+            print(code.co_argcount, end=' ')
+            print(code.co_varnames, end=' ')
+            print('%x' % code.co_flags)
             raise
 
         if extra_args_ok:
@@ -438,16 +438,16 @@ class Apply(object):
             lineno = [0]
 
         if self in memo:
-            print >> ofile, lineno[0], ' ' * indent + memo[self]
+            print(lineno[0], ' ' * indent + memo[self], file=ofile)
             lineno[0] += 1
         else:
             memo[self] = self.name + ('  [line:%i]' % lineno[0])
-            print >> ofile, lineno[0], ' ' * indent + self.name
+            print(lineno[0], ' ' * indent + self.name, file=ofile)
             lineno[0] += 1
             for arg in self.pos_args:
                 arg.pprint(ofile, lineno, indent + 2, memo)
             for name, arg in self.named_args:
-                print >> ofile, lineno[0], ' ' * indent + ' ' + name + ' ='
+                print(lineno[0], ' ' * indent + ' ' + name + ' =', file=ofile)
                 lineno[0] += 1
                 arg.pprint(ofile, lineno, indent + 2, memo)
 
@@ -526,7 +526,7 @@ class Apply(object):
 
 def apply(name, *args, **kwargs):
     pos_args = [as_apply(a) for a in args]
-    named_args = [(k, as_apply(v)) for (k, v) in kwargs.items()]
+    named_args = [(k, as_apply(v)) for (k, v) in list(kwargs.items())]
     named_args.sort()
     return Apply(name,
             pos_args=pos_args,
@@ -562,7 +562,7 @@ class Literal(Apply):
         if memo is None:
             memo = {}
         if self in memo:
-            print >> ofile, lineno[0], ' ' * indent + memo[self]
+            print(lineno[0], ' ' * indent + memo[self], file=ofile)
         else:
             # TODO: set up a registry for this
             if isinstance(self._obj, np.ndarray):
@@ -571,7 +571,7 @@ class Literal(Apply):
             else:
                 msg = 'Literal{%s}' % str(self._obj)
             memo[self] = '%s  [line:%i]' % (msg, lineno[0])
-            print >> ofile, lineno[0], ' ' * indent + msg
+            print(lineno[0], ' ' * indent + msg, file=ofile)
         lineno[0] += 1
 
     def replace_input(self, old_node, new_node):
@@ -846,7 +846,7 @@ def rec_eval(expr, deepcopy_inputs=False, memo=None,
             raise RuntimeError('Probably infinite loop in document')
         node = todo.pop()
         if print_trace:
-            print 'rec_eval:print_trace', len(todo), node.name
+            print('rec_eval:print_trace', len(todo), node.name)
 
         if node in memo:
             # -- we've already computed this, move on.
@@ -895,7 +895,7 @@ def rec_eval(expr, deepcopy_inputs=False, memo=None,
                 for (k, v) in node.named_args])
 
             if memo_gc:
-                for aa in args + kwargs.values():
+                for aa in args + list(kwargs.values()):
                     assert aa is not GarbageCollected
 
             if deepcopy_inputs:
@@ -905,14 +905,14 @@ def rec_eval(expr, deepcopy_inputs=False, memo=None,
             try:
                 rval = scope._impls[node.name](*args, **kwargs)
 
-            except Exception, e:
+            except Exception as e:
                 if print_node_on_error:
-                    print '=' * 80
-                    print 'ERROR in rec_eval'
-                    print 'EXCEPTION', type(e), str(e)
-                    print 'NODE'
-                    print node  # -- typically a multi-line string
-                    print '=' * 80
+                    print('=' * 80)
+                    print('ERROR in rec_eval')
+                    print('EXCEPTION', type(e), str(e))
+                    print('NODE')
+                    print(node)  # -- typically a multi-line string
+                    print('=' * 80)
                 raise
 
             if isinstance(rval, Apply):
@@ -1114,7 +1114,7 @@ def switch(pos, *args):
 def _kwswitch(kw, **kwargs):
     """conditional evaluation according to string value"""
     # Get the index of the string in kwargs to use switch
-    keys, values = zip(*sorted(kwargs.iteritems()))
+    keys, values = list(zip(*sorted(kwargs.items())))
     match_idx = scope.call_method_pure(keys, 'index', kw)
     return scope.switch(match_idx, *values)
 
